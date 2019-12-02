@@ -1,0 +1,428 @@
+################# Tortuosity Metrics #################
+
+# This script contains functions for calculating tortuosity metrics for easy sourcing.  Metrics included are: (1) distance metric; (2) inflection count metric; (3) sum of all angles metric; (4) curvature torsion metric
+
+library("pracma")
+# source("./frenet_vectors.R")
+
+################## Distance Metric #################
+
+## This code is the function for calculating the standard distance metric (DM) of tortuosity of a curve.  This method calculated the path length along a curve, and divides that value by the euclidean distance between the endpoints of the curve.  For documentation on this method, see Bullitt et al., "Measruing Tortuosity of the Intracerebral Vasculature From MRA Images", IEEE Transactions on medical Imaging, Vol. 22, No. 9, September 2003. Note that this metric is impervious to differentiating between curvature and tortuosity...but we all must start somewhere.
+
+
+euclidean_distance <- function(pt1, pt2){
+  ## This function calculates the euclidean distance between two points in 3D, labeled as pt1 and pt2.
+  distance <- sqrt((pt2[1] - pt1[1])**2 + (pt2[2] - pt1[2])**2 + (pt2[3] - pt1[3])**2)
+  return(distance)
+}
+
+distance_metric <- function(vessel_coords, units){
+  pointwise_distance <- mat.or.vec(length(vessel_coords[,1]), 1)
+  for(i in 1:(length(pointwise_distance)-1)){
+    pointwise_distance[i] <- euclidean_distance(vessel_coords[i,], vessel_coords[i+1,])
+  }
+  pathlength <- sum(pointwise_distance)
+  step_size <- mean(pointwise_distance)
+  end_to_end_distance <- euclidean_distance(vessel_coords[1,], vessel_coords[length(pointwise_distance),])
+  return(c(pathlength, pathlength/end_to_end_distance, step_size))
+}
+
+################## Inflection Count Metric #################
+
+## This code is the function for calculating the inflection count metric (ICM) of tortuosity of a curve.  This method calculates the distance metric (DM) and multiples it by the number of inflection points along the curve.  Inflection points can be identified by identifying local maxima of the quantity delta N dot delta N, where N is the unit vector representing the Frenet normal axis, and delta N represnts changes in this vector associated with points pt1 and pt2 along the curve.  For documentation on this method, see Bullitt et al., "Measruing Tortuosity of the Intracerebral Vasculature From MRA Images", IEEE Transactions on medical Imaging, Vol. 22, No. 9, September 2003. Note that this metric is intended to differentiate between long broad curves with few oscillations and curves with high oscillations.  Realize that here oscillations is to be interpreted as in plane oscillations, not spirals (or straight helices).  This is because spirals do not actually exhibit inflection points.
+
+inflection_count_metric <- function(vessel_coords, return_count = TRUE, return_coords = FALSE, vector = "normal", method = "five-point", filter = FALSE){
+  ## Initialize normal_array, delta_N array, and delta_N squared vector
+  vector_array <- mat.or.vec(length(vessel_coords[,1]), 3)
+  delta_vec <- mat.or.vec(length(vessel_coords[,1]), 3)
+  delta_vec_squared <- mat.or.vec(length(vessel_coords[,1]), 1)
+  
+  vector_array[,] <- NaN
+  delta_vec[] <- NaN
+  delta_vec_squared[] <- NaN
+  
+  normal_vector_bullitt <- function(pt1, pt2, pt3, filter){
+    v <- pt3 - pt1
+    a <- pt3 - 2*pt2 + pt1
+    if(filter){
+      if(sqrt(sum(a*a)) < 0.00001){
+        ## This is to apply filter that Bullitt mentions using.  We are assuming units of mm.
+        return(NaN)
+      }else{
+        # mag_v <- sqrt(sum(v*v))
+        # mag_a <- sqrt(sum(a*a))
+        # v <- v/mag_v
+        # a <- a/mag_a
+        n <- cross(v, cross(a, v))
+        mag_n <- sqrt(sum(n*n))
+        N <- n/mag_n
+        return(N)
+      }
+    }else{
+      n <- cross(v, cross(a, v))
+      mag_n <- sqrt(sum(n*n))
+      N <- n/mag_n
+      return(N)
+    }
+  }
+  
+  
+  if(vector == "normal"){
+    if(method == "five-point"){
+      for(i in 3:(length(vector_array[,1]) - 2)){
+        vector_array[i,] <- normal_vector(vessel_coords[i-2,], vessel_coords[i-1,], vessel_coords[i,], vessel_coords[i+1,], vessel_coords[i+2,])
+      }
+    }else if(method == "bullitt"){
+      for(i in 2:(length(vector_array[,1]) - 1)){
+        vector_array[i,] <- normal_vector_bullitt(vessel_coords[i-1,], vessel_coords[i,], vessel_coords[i+1,], filter)
+      }
+    }
+  } else {
+    for(i in 3:(length(vector_array[,1]) - 2)){
+      vector_array[i,] <- binormal_vector(vessel_coords[i-2,], vessel_coords[i-1,], vessel_coords[i,], vessel_coords[i+1,], vessel_coords[i+2,])
+    }
+  }
+  for(i in 2:length(delta_vec[,1])){
+    delta_vec[i,] <- vector_array[i,] - vector_array[i-1,]
+  }
+  # if(method == "five-point"){
+  #   for(i in 3:(length(delta_vec[,1]) - 2)){
+  #     delta_vec[i,] <- vector_array[i+2,] - vector_array[i-2,]
+  #   }
+  # }else if(method == "bullitt"){
+  #   for(i in 2:length(delta_vec[,1])){
+  #     delta_vec[i,] <- vector_array[i] - vector_array[i-1,]
+  #   }
+  # }
+  
+  for(i in 1:length(delta_vec[,1])){
+    delta_vec_squared[i] <- sum(delta_vec[i,]*delta_vec[i,])
+  }
+  
+  inflection_count <- length(which(delta_vec_squared > 1)) + 1
+  if(return_count == TRUE){
+    return(inflection_count)
+  }
+  if(return_coords == TRUE){
+    return(delta_vec_squared)
+  }
+}
+
+## Here we have the method for calculating inflection points as local minima in the curvature array.  This method comes from https://stackoverflow.com/questions/6836409/finding-local-maxima-and-minima. 
+inflect <- function(x, threshold = 1){
+  up   <- sapply(1:threshold, function(n) c(x[-(seq(n))], rep(NA, n)))
+  down <-  sapply(-1:-threshold, function(n) c(rep(NA,abs(n)), x[-seq(length(x), length(x) - abs(n) + 1)]))
+  a    <- cbind(x,up,down)
+  list(minima = which(apply(a, 1, min) == a[,1]), maxima = which(apply(a, 1, max) == a[,1]))
+}
+
+################## Sum of All Angles #################
+
+## This code is the function for calculating the sum of all angles metric (SOAM) of tortuosity of a curve.  This method calculates the both the angular changes within plane (a proxy measure for local curvature, represnted as IP_k for in-plane angle at point P_k) and out of plane (a proxy measure for local torsion, represented as TP_k for torsion angle at point P_k). These two quantities are combined via a square root of the sum of squares to generate the total angle (a proxy for total "curvature", represented as CP_k for curvature at point P_k).  Finally, the curvature CP_k is "integreated" by discrete sum along the lenght of the curve, and the total quantity is normalized by path length.  For documentation on this method, see Bullitt et al., "Measruing Tortuosity of the Intracerebral Vasculature From MRA Images", IEEE Transactions on medical Imaging, Vol. 22, No. 9, September 2003. Note that this metric is intended to better identify tight coils void of inflection points.
+
+## Should explore how this metric performs in identifying in plane arc versus out of plane tortuos vessel.  That is, output value does not uniquely distinguish between two cases as the angles are combined.  
+
+## Consider an extention of this metric that calculates integrated curvature and torsion seperately.
+
+
+
+cpk_calc <- function(pt1, pt2, pt3, pt4){
+  
+  T1 <- pt2 - pt1
+  T1_norm <- T1/sqrt(sum(T1*T1))
+  T2 <- pt3 - pt2
+  T2_norm <- T2/sqrt(sum(T2*T2))
+  
+  ipk_value <- acos(sum(T1_norm*T2_norm))
+  
+  T3 <- pt4 - pt3
+  T1_cross_T2 <- cross(T1, T2)
+  T1_cross_T2_norm <- T1_cross_T2/sqrt(sum(T1_cross_T2*T1_cross_T2))
+  T2_cross_T3 <- cross(T2, T3)
+  T2_cross_T3_norm <- T2_cross_T3/sqrt(sum(T2_cross_T3*T2_cross_T3))
+  
+  tpk_value <- acos(abs(sum(T1_cross_T2_norm*T2_cross_T3_norm)))
+  
+  cpk_value <- sqrt(ipk_value**2 + tpk_value**2)
+  return(cpk_value)
+}
+
+sum_of_all_angles_metric <- function(vessel_coords, filter = FALSE){
+  
+  num_points <- length(vessel_coords[,1])
+  
+  cpk_array <- mat.or.vec(num_points,1)
+  
+  for(i in 2:(num_points - 2)){
+    pt1 <- vessel_coords[i-1,]
+    pt2 <- vessel_coords[i,]
+    pt3 <- vessel_coords[i+1,]
+    pt4 <- vessel_coords[i+2,]
+    
+    if(filter == TRUE){
+      v <- pt3 - pt1
+      a <- pt3 - 2*pt2 + pt1
+      if(sqrt(sum(a*a)) < 0.00001){
+        cpk_array[i] <- NaN
+      }else{cpk_array[i] <- cpk_calc(pt1, pt2, pt3, pt4)}
+    }else{cpk_array[i] <- cpk_calc(pt1, pt2, pt3, pt4)}
+  }
+  
+  path_length <- distance_metric(vessel_coords)[1]
+  
+  soam <- sum(cpk_array[-c(1, num_points, num_points-1, num_points-2)], na.rm = TRUE)/path_length
+  # soam <- sum(cpk_array[-c(1, num_points, num_points-1, num_points-2)])
+  return(list(soam, cpk_array))
+}
+
+################## Curvature Torsion Calculator #################
+
+curvature_torsion_calculator <- function(vessel_coords, filter_torsion_spikes = FALSE, filter_tolerance = 0.00001, k = NULL){
+  ## --DEPRECATED-- This function calculates curvature at a point(s) given a set Frenet-Serrat frame vectors.  The approach used to calculate curvature and torsion is rather simple, and is taken from RHB pps. 340-343, however it seems sufficient for the time being.  Currently, this is done using the defining relations between curvature and torsion and the Frenet-Serrat frame vectors.  Specifically, from dt-hat/ds = kappa*n-hat, we can find curvature kappa from kappa = n-hat dot dt-hat/ds.  Similarly, from db-hat/ds = -tau*n-hat, we can find torsion tau from tau = -n-hat dot db-hat/ds.  This approach seems considerably subject to noise in the data, thus the next version to try would be calculting curvature and torsion directly from the r(s) parameterization, where we discretize derivatives of r(s) to extract curvature and torsion (this is taken from O'Flynn et al., Annals of Biomedical Engineering, 2007).  This latter approach to calculating curvature has been explored in the draft .R script implementing_li_etal_compaidgraph.R.  There we found that accuracy and the occurance of torsion spikes are comparable to results found using our above method.  Considering that we will soon be implementing an initial-value-problem aproach to identifying and correcting for torsion spikes that is based on the Frenet-Serret equations, we will continue using the former method for calucaulating curvature and torsion as described above.  Currently, we calculate the Frenet-Serrat frame vectors from r(s), then discretize derivatives of the frame vectors.
+  ## The new version of this function calculates curvature and torsion at a point(s) given the position vector of a vessel.  The approach used to caluclate curvatre and torsion comes from standard formulas involving vector products of derivatives of the position vector.  Despite previous code commenting, we are transitioning to the r(s) parameterization to better facilitate the identification of torsion spikes by locating minima in the numerator of the curvature expression, |r'(s) x r''(s)|.  We implement two versions of filtering for testing, a standard Heaviside approach that so far is the only type referenced in the literature, and a second smoother method where we multiple the local value of torsion by the absolute value of the hyperbolic tangent of the numerator of the curvature expression.  In the former approach, a threshold is defined to determine when to turn on/off the Heavidside function.  In the latter approach, a threshold is defined to determine the smoothing width of the hyperbolic tangent function.  The default method is to not filter at all.  To toggle filtering on/off, and between the two different methods, use filter = smooth or filter = step.  To vary the threshold for the filtering methods, set the value of epsilon.  Finally, we have implemented calculating torsion using Hord's formula, modified for general parameterizations.  The parameter "k" is used to toggle this, representative of the k = 0 assumption regarding singularity inducing curvature values.
+  
+  # Define functions that calculate curvature, the numerator of curvature (or denomenator of torsion), and torsion.
+  curvature_posvec <- function(r1, r2, r3){
+    return(sqrt(sum(cross(r1, r2)*cross(r1,r2)))/sqrt(sum(r1*r1))**3) # momentarily suppressed to try formula below
+    # return(sqrt(sum(r2*r2))) # this is "correct" formula for arc length parameterization.  However, it leads to unexpected discontinuous values at higher sampling rates.
+    # return(sum(cross(r1,r2)*cross(r1,r2)))
+  }
+  
+  curvature_posvec_num <- function(r1, r2, r3){
+    # return(sqrt(sum(cross(r1, r2)*cross(r1,r2)))/sqrt(sum(r1*r1))**3) 
+    return(sqrt(sum(cross(r1,r2)*cross(r1,r2))))
+  }
+  
+  torsion_posvec <- function(r1, r2, r3){
+    return(sum(r1*(cross(r2,r3)))/sum(cross(r1,r2)*cross(r1,r2))) # momentarily suppressed to try formula below
+    # return(sum(r1*(cross(r2,r3)))/sum(r2*r2))  # this is "correct" formula for arc length parameterization.  However, it too leads to unexpected discontinuous values at higher sampling rates.  Also does not result in accurate reconstructions at even high sampling rates.
+  }
+  
+  r_prime <- mat.or.vec(nrow(vessel_coords),3)
+  r_db_prime <- mat.or.vec(nrow(vessel_coords),3)
+  r_trp_prime <- mat.or.vec(nrow(vessel_coords),3)
+  r_quad_prime <- mat.or.vec(nrow(vessel_coords),3)
+  
+  r_prime[,] <- NaN
+  r_db_prime[,] <- NaN
+  r_trp_prime[,] <- NaN
+  r_quad_prime[,] <- NaN
+  
+  curvature <- mat.or.vec(nrow(vessel_coords),1)
+  curvature_num <- mat.or.vec(nrow(vessel_coords),1)
+  torsion <- mat.or.vec(nrow(vessel_coords),1)
+  combined_curvature <- mat.or.vec(nrow(vessel_coords),1)
+  
+  curvature[] <- NaN
+  curvature_num[] <- NaN
+  torsion[] <- NaN
+  combined_curvature[] <- NaN
+  
+  # Arc length is needed for the entire length of the curve.  As the average step size is also needed for the calculations of curvature, we will extract that value from the mean of the pointwise distances.
+  
+  arclength <- mat.or.vec(nrow(vessel_coords),1)
+  # arclength[] <- NaN
+  
+  pointwise_distance <- mat.or.vec(length(vessel_coords[,1]), 1)
+  for(i in 2:length(pointwise_distance)){
+    pointwise_distance[i] <- euclidean_distance(vessel_coords[i-1,], vessel_coords[i,])
+    arclength[i] <- sum(pointwise_distance)
+  }
+  
+  step <- mean(pointwise_distance, na.rm = TRUE)
+  
+  for(i in 3:(nrow(vessel_coords) - 2)){
+    
+    # Using five-point stencil for calculating first, second, third, and fourth order derivatives of position vector.  Note that the overall factor of 1/2 will be pushed into r_quad_prime.
+    r_prime[i,] <- (1/(3*step))*(0.25*vessel_coords[i-2,] - 2*vessel_coords[i-1,] + 2*vessel_coords[i+1,] - 0.25*vessel_coords[i+2,])
+    r_db_prime[i,] <- (1/step**2)*(-(1/12)*vessel_coords[i-2,] + (4/3)*vessel_coords[i-1,] - (5/2)*vessel_coords[i,] + (4/3)*vessel_coords[i+1,] - (1/12)*vessel_coords[i+2,])
+    r_trp_prime[i,] <- (1/step**3)*(-0.5*vessel_coords[i-2,] + vessel_coords[i-1,] - vessel_coords[i+1,] + 0.5*vessel_coords[i+2,])
+    r_quad_prime[i,] <- (1/(2*step**4))*(vessel_coords[i-2,] - 4*vessel_coords[i-1,] + 6*vessel_coords[i,] - 4*vessel_coords[i+1,] + vessel_coords[i+2,])
+    
+    
+    
+    # # Calculate curvature and curvature numerator
+    # curvature[i] <- curvature_posvec(r_prime[i,], r_db_prime[i,], r_trp_prime[i,])
+    # curvature_num[i] <- curvature_posvec_num(r_prime[i,], r_db_prime[i,], r_trp_prime[i,])
+    
+    # Toggle between different methods for calculating torsion.
+    if(filter_torsion_spikes == "step"){ # Heaviside method
+      pt1 <- vessel_coords[i-1,]
+      pt2 <- vessel_coords[i,]
+      pt3 <- vessel_coords[i+1,]
+      v <- pt3 - pt1
+      a <- pt3 - 2*pt2 + pt1
+      if(sqrt(sum(a*a)) <= filter_tolerance){
+        curvature[i] <- NaN
+        torsion[i] <- NaN
+      }else{
+        curvature[i] <- curvature_posvec(r_prime[i,], r_db_prime[i,], r_trp_prime[i,])
+        if(is.null(k)){
+          torsion[i] <- torsion_posvec(r_prime[i,], r_db_prime[i,], r_trp_prime[i,])
+        }else{
+          torsion[i] <- torsion_posvec(r_prime[i,], r_trp_prime[i,], r_quad_prime[i,])
+        }
+        
+      }
+    }else if(filter_torsion_spikes == "smooth"){ # Smooth filtering method
+      curvature[i] <- curvature_posvec(r_prime[i,], r_db_prime[i,], r_trp_prime[i,])
+      torsion[i] <- torsion_posvec(r_prime[i,], r_db_prime[i,], r_trp_prime[i,])*abs(tanh(1/filter_tolerance*sqrt(sum(r_db_prime[i]*r_db_prime[i]))))
+    }else{ # No filter
+      curvature[i] <- curvature_posvec(r_prime[i,], r_db_prime[i,], r_trp_prime[i,])
+      if(is.null(k)){
+        torsion[i] <- torsion_posvec(r_prime[i,], r_db_prime[i,], r_trp_prime[i,])
+      }else{
+        torsion[i] <- torsion_posvec(r_prime[i,], r_trp_prime[i,], r_quad_prime[i,])
+      }
+      
+    }
+    combined_curvature[i] <- sqrt(curvature[i]**2 + torsion[i]**2)
+  }
+  # ######## -------DEPRECATED------- #########
+  # # Coerce frenet arrays to matrices.
+  # 
+  # tangent <- as.matrix(tangent)
+  # normal <- as.matrix(normal)
+  # binormal <- as.matrix(binormal)
+  # 
+  # # Initialize curvature and torsion values along vessel
+  # curve_vec <- mat.or.vec(nrow(tangent),1)
+  # torse_vec <- mat.or.vec(nrow(tangent),1)
+  # combined_curvature <- mat.or.vec(nrow(tangent),1)
+  # curve_check_vec <- mat.or.vec(nrow(tangent), 1)
+  # torse_check_vec <- mat.or.vec(nrow(tangent), 1)
+  # 
+  # curve_vec[] <- NaN
+  # torse_vec[] <- NaN
+  # combined_curvature[] <- NaN
+  # curve_check_vec[] <- NaN
+  # torse_check_vec[] <- NaN
+  # 
+  # 
+  # diff_tan <- mat.or.vec(nrow(tangent),3)
+  # diff_nor <- mat.or.vec(nrow(tangent),3)
+  # diff_bin <- mat.or.vec(nrow(tangent),3)
+  # 
+  # diff_tan[,] <- NaN
+  # diff_nor[,] <- NaN
+  # diff_bin[,] <- NaN
+  # 
+  # 
+  # for(i in 3:(nrow(tangent) - 2)){
+  #   # New five-points methods for calculating first order derivatives of FS frame vectors to extract curvature and torsion
+  #   diff_tan[i,] <- (1/(3*step))*(0.25*tangent[i-2,] - 2*tangent[i-1,] + 2*tangent[i+1,] - 0.25*tangent[i+2,])
+  #   diff_nor[i,] <- (1/(3*step))*(0.25*normal[i-2,] - 2*normal[i-1,] + 2*normal[i+1,] - 0.25*normal[i+2,])
+  #   diff_bin[i,] <- (1/(3*step))*(0.25*binormal[i-2,] - 2*binormal[i-1,] + 2*binormal[i+1,] - 0.25*binormal[i+2,])
+  # }
+  # 
+  # Deprecated three-point methods for caluclating first order derivatives of FS frame vectors to extract curvature and torsion
+  # for(i in 1:(nrow(tangent)-2)){
+  #   diff_tan[i+1,] <- (tangent[i+2,] - tangent[i,])/(arclength[i+2]-arclength[i])
+  # }
+  # for(i in 1:(nrow(tangent)-2)){
+  #   diff_bin[i+1,] <- (binormal[i+2,] - binormal[i,])/(arclength[i+2]-arclength[i])
+  # }
+  # for(i in 1:(nrow(tangent)-2)){
+  #   diff_nor[i+1,] <- (normal[i+2,] - normal[i,])/(arclength[i+2] - arclength[i])
+  # }
+  # 
+  # for(i in 1:nrow(tangent)){
+  #   curve_vec[i] <- sum(diff_tan[i,]*normal[i,])
+  #   torse_vec[i] <- -sum(diff_bin[i,]*normal[i,]) #*abs(tanh(curve_vec[i]))
+  #   combined_curvature[i] <- sqrt(curve_vec[i]**2 + torse_vec[i]**2)
+  #   curve_check_vec[i] <- sum(diff_nor[i,]*tangent[i,]) + curve_vec[i]*sum(tangent[i,]*tangent[i,])
+  #   torse_check_vec[i] <- sum(diff_nor[i,]*binormal[i,]) - torse_vec[i]*sum(binormal[i,]*binormal[i,])
+  # }
+  # 
+  # #Due to the effect of inflection points throwing off measures of torsion, we will use the inflection count metric to determine the location of inflection points, and those nearly neighboring of, to correct for spikes in the torsion values.  Currently we will simply replace the torsion values with NaN's.  However, in the future we could combine the methods of Li and Cripps, "Identification of inflection points and cusps on rational curves" in Computer Aided Graphical Design, Vol. 14, (1997), pp. 491-497, to locate definitively the inflection points as well as Hord, "Torsion at an inflection point of a space curve" in The American Mathematical Monthly, Vol. 79, No. 4, (Apr., 1992), pp. 371-374, to calculate the value of torsion at the loations of inflection points. 
+  # #After exploring the approach described in Li et al. in the .R script implementing_li_etal_compaidgraph.R, and finding it to be an inferior approach when implemented numerically, we have instead adopted a temporary fix that searches for values of |r' X r''| = epsilon, where epsilon is a user defined threshold value for identifying spikes in torsion.  The vector product used is based on the fact that this is the denomenator term in the position vector definition of torsion.  See implementing_li_etal_compaidgraph.R for draft code exploring this approach.
+  # 
+  # 
+  # ## Deprectaed version of filtering for torsion spikes.  Preserved for tracking purposes.
+  # if(filter_torsion_spikes){
+  #   delta_N_squared <- inflection_count_metric(vessel_coords = vessel_coords, return_count = FALSE, return_coords = TRUE)
+  #   inflection_point_indx <- which(delta_N_squared > 2)
+  #   threshold_point_indx <- which(delta_N_squared < 0.1)
+  #   ## subroutine for endpoints
+  #   endpoint_indx <- inflection_point_indx[c(1, length(inflection_point_indx))]
+  #   # End point test to determine how close first torsion spike is to front end of vessel.  Too close (as determined by threshold of 0.1 in delta_N*delta_N), and all points leading up to first spike are replaced with NaN.  Not too close, and only points surpassing threshold are replaced.
+  #   if(length(which(which(delta_N_squared < 0.1) < inflection_point_indx[1])) == 0){
+  #     torse_vec[1:inflection_point_indx[1]] <- NaN
+  #   }else{
+  #     torse_vec[max(threshold_point_indx[threshold_point_indx < inflection_point_indx[1]]):inflection_point_indx[1]] <- NaN
+  #   }
+  #   # End point test to determine how close last torsion spike is to end end of vessel.  Too close (as determined by threshold of 0.1 in delta_N*delta_N), and all points after last spike are replaced with NaN.  Not too close, and only points surpassing threshold are replaced.
+  #   if(length(which(which(delta_N_squared < 0.1) > inflection_point_indx[length(inflection_point_indx)])) == 0){
+  #     torse_vec[1:inflection_point_indx[1]] <- NaN
+  #   }else{
+  #     torse_vec[inflection_point_indx[length(inflection_point_indx)]:min(threshold_point_indx[threshold_point_indx > inflection_point_indx[length(inflection_point_indx)]])] <- NaN
+  #   }
+  #   
+  #   # subroutine for internal points
+  #   for(i in 1:(length(inflection_point_indx)-1)){
+  #     #find points ranging from inflection_point_indx[i] to nearest threshold passing point, replace with NaNs
+  #     torse_vec[inflection_point_indx[i]:min(threshold_point_indx[threshold_point_indx > inflection_point_indx[i]])] <- NaN
+  #     
+  #     #find points ranging from next threshold passing point to inflection_point_indx[i+1], replace with NaNs
+  #     torse_vec[max(threshold_point_indx[threshold_point_indx < inflection_point_indx[i+1]]):inflection_point_indx[i+1]] <- NaN
+  #   }
+  # }
+  
+  # if(filter_torsion_spikes){
+  #   ##### New version of filtering for torsion spikes.  A sensible next round of improvement would be resmothing the torsion vector to provide for slightly more continuous transitions from zero to non-zero torsion where filtering occured.  Do this pending results of initial-value-problem approach to extracting torsion values.
+  #   
+  #   r_prime <- mat.or.vec(nrow(vessel_coords),3)
+  #   r_db_prime <- mat.or.vec(nrow(vessel_coords),3)
+  #   
+  #   r_prime[,] <- NaN
+  #   r_db_prime[,] <- NaN
+  #   
+  #   torse_denom <- mat.or.vec(nrow(vessel_coords),1)
+  #   
+  #   torse_denom[] <- NaN
+  #   
+  #   for(i in 3:(nrow(vessel_coords) - 2)){
+  #     # Using five-point stencil for calculating first, second, and third order derivatives of position vector
+  #     r_prime[i,] <- (1/(3*step))*(0.25*vessel_coords[i-2,] - 2*vessel_coords[i-1,] + 2*vessel_coords[i+1,] - 0.25*vessel_coords[i+2,])
+  #     r_db_prime[i,] <- (1/step**2)*(-(1/12)*vessel_coords[i-2,] + (4/3)*vessel_coords[i-1,] - (5/2)*vessel_coords[i,] + (4/3)*vessel_coords[i+1,] - (1/12)*vessel_coords[i+2,])
+  #     torse_denom[i] <- sum(cross(r_prime[i,], r_db_prime[i,])*cross(r_prime[i,], r_db_prime[i,]))
+  #     # torse_vec[i] <- torse_vec[i]*abs(tanh(torse_denom[i]))
+  #   }
+  #   
+  #   torse_vec[which(torse_denom < filter_tolerance)] <- 0
+  # }
+  
+  
+  #### Calculate totals/averages of metrics. ####
+  
+  TC_vec <- mat.or.vec(nr = length(arclength), nc = 1)
+  TT_vec <- mat.or.vec(nr = length(arclength), nc = 1)
+  TCsq_vec <- mat.or.vec(nr = length(arclength), nc = 1)
+  TTsq_vec <- mat.or.vec(nr = length(arclength), nc = 1)
+  filtered_points <- mat.or.vec(nr = length(arclength), nc = 1)
+  comb_curv_int_vec <- mat.or.vec(nr = length(arclength), nc = 1)
+  for(i in 1:(length(TC_vec)-1)){
+    TC_vec[i] <- curvature[i]*(arclength[i+1]-arclength[i])
+    TT_vec[i] <- abs(torsion[i])*(arclength[i+1]-arclength[i])
+    TCsq_vec[i] <- curvature[i]**2*(arclength[i+1]-arclength[i])
+    TTsq_vec[i] <- abs(torsion[i])**2*(arclength[i+1]-arclength[i])
+    comb_curv_int_vec[i] <- combined_curvature[i]*(arclength[i+1]-arclength[i])
+  }
+  
+  TC <- sum(TC_vec, na.rm = T)
+  AC <- mean(abs(curvature), na.rm = T)
+  TT <- sum(TT_vec, na.rm = T)
+  AT <- mean(abs(torsion), na.rm = T)
+  MC <- max(curvature, na.rm = T)
+  MT <- max(abs(torsion), na.rm = T)
+  TCC <- sum(abs(combined_curvature), na.rm = T)
+  ACC <- mean(abs(combined_curvature), na.rm = T)
+  TCsq <- sum(TCsq_vec, na.rm = T)
+  TTsq <- sum(TTsq_vec, na.rm = T)
+  filtered_points <- sum(is.na(curvature)) - 4
+  local_minima <- length(inflect(x = curvature))
+  comb_curv_int <- sum(comb_curv_int_vec, na.rm = T)
+  
+  # return(list(curvature = curvature, torsion = torsion, arclength = arclength, TC = TC, AC = AC, TT = TT, AT = AT, MC = MC, MT = MT, TCC = TCC, ACC = ACC, curvature_check = curve_check_vec, torsion_check = torse_check_vec))
+  return(list(curvature = curvature, torsion = torsion, arclength = arclength, TC = TC, AC = AC, TT = TT, AT = AT, MC = MC, MT = MT, TCC = TCC, ACC = ACC, TCsq = TCsq, TTsq = TTsq, step = step, filtered_points = filtered_points, local_minima = local_minima, comb_curv_int = comb_curv_int, r_prime = r_prime, r_db_prime = r_db_prime, r_trp_prime = r_trp_prime, r_quad_prime = r_quad_prime))
+}
