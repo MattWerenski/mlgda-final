@@ -1,0 +1,60 @@
+name: spektral
+channels:
+  - alubbock
+  - defaults
+dependencies:
+  - ca-certificates=2019.11.27=0
+  - certifi=2019.11.28=py37_0
+  - graphviz=2.41=0
+  - libiconv=1.15=h1df5818_7
+  - libpng=1.6.37=h2a8f88b_0
+  - libxml2=2.9.9=h464c3ec_0
+  - openssl=1.1.1d=he774522_3
+  - pip=19.3.1=py37_0
+  - pygraphviz=1.5=py37_0
+  - python=3.7.5=h8c8aaf0_0
+  - setuptools=42.0.2=py37_0
+  - sqlite=3.30.1=he774522_0
+  - vc=14.1=h0510ff6_4
+  - vs2015_runtime=14.16.27012=hf0eaf9b_0
+  - wheel=0.33.6=py37_0
+  - wincertstore=0.2=py37_0
+  - zlib=1.2.11=h62dcd97_3
+  - pip:
+    - absl-py==0.8.1
+    - astor==0.8.0
+    - chardet==3.0.4
+    - decorator==4.4.1
+    - gast==0.2.2
+    - google-pasta==0.1.8
+    - grpcio==1.25.0
+    - h5py==2.10.0
+    - idna==2.8
+    - joblib==0.14.0
+    - keras==2.2.5
+    - keras-applications==1.0.8
+    - keras-preprocessing==1.1.0
+    - lxml==4.4.2
+    - markdown==3.1.1
+    - networkx==2.4
+    - numpy==1.17.4
+    - opt-einsum==3.1.0
+    - pandas==0.25.3
+    - protobuf==3.11.1
+    - python-dateutil==2.8.1
+    - pytz==2019.3
+    - pyyaml==5.2
+    - requests==2.22.0
+    - scikit-learn==0.22
+    - scipy==1.3.3
+    - six==1.13.0
+    - spektral==0.1.1
+    - tensorboard==1.15.0
+    - tensorflow==1.15.0
+    - tensorflow-estimator==1.15.1
+    - termcolor==1.1.0
+    - urllib3==1.25.7
+    - werkzeug==0.16.0
+    - wrapt==1.11.2
+prefix: C:\Users\Panagiotis\Anaconda3\envs\spektral
+
