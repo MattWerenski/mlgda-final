@@ -8,11 +8,9 @@ from load_data import *
 
 A,X,y = load_data()
 
-model = SimpleModel(A.shape[0],X.shape[-1])
+model = SimpleModel(A.shape[0], X.shape[-1])
 
 model.fit(A,X,y)
-
-
 
 score = model.evaluate(A,X,y)
 

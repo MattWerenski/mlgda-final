@@ -5,21 +5,17 @@ channels:
 dependencies:
   - ca-certificates=2019.11.27=0
   - certifi=2019.11.28=py37_0
-  - graphviz=2.41=0
-  - libiconv=1.15=h1df5818_7
-  - libpng=1.6.37=h2a8f88b_0
-  - libxml2=2.9.9=h464c3ec_0
-  - openssl=1.1.1d=he774522_3
+  - libiconv=1.15
+  - libpng=1.6.37
+  - libxml2=2.9.9
+  - openssl=1.1.1d
   - pip=19.3.1=py37_0
-  - pygraphviz=1.5=py37_0
-  - python=3.7.5=h8c8aaf0_0
+  - pygraphviz=1.5
+  - python=3.7.5
   - setuptools=42.0.2=py37_0
-  - sqlite=3.30.1=he774522_0
-  - vc=14.1=h0510ff6_4
-  - vs2015_runtime=14.16.27012=hf0eaf9b_0
+  - sqlite=3.30.1
   - wheel=0.33.6=py37_0
-  - wincertstore=0.2=py37_0
-  - zlib=1.2.11=h62dcd97_3
+  - zlib=1.2.11
   - pip:
     - absl-py==0.8.1
     - astor==0.8.0

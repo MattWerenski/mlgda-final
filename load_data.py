@@ -7,7 +7,8 @@ from sklearn.preprocessing import FunctionTransformer
 from os.path import join
 
 def load_data():
-    input_path = "D:\\work\\Classes\\Tufts\\MLonGraphs\\Project\\data\\lung_adjmatrices_featurematrices\\"
+    #input_path = "D:\\work\\Classes\\Tufts\\MLonGraphs\\Project\\data\\lung_adjmatrices_featurematrices\\"
+    input_path = "data/lung_adjmatrices_featurematrices/"
 
     to_drop = ["Unnamed: 0","id","labels"]
 
