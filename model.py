@@ -17,8 +17,8 @@ class SimpleModel:
         A = Input((MAX_GRAPH_SIZE, ),) #sparse=True)
         X = Input((F,))
         
-        h1 = MyGraphConv(100)([X,A])
-        h2 = MyGraphConv(100)([X,A])
+        #h1 = GraphConv(100)([X,A])
+        h2 = GraphSageConv(50)([X,A])
 
         d = Dense(64, activation = 'relu')(h2)
         y = Dense(1, activation = 'sigmoid')(d)
