@@ -60,6 +60,8 @@ def make_adjmat(data, name_index, indeces):
 def process_angicart_output(filename):
     
     data = pd.read_csv(join(input_path,filename), sep = '\t')
+    data = data.sort_values(" name")
+    
     names = data[' name']
     names=  [str(i).strip().strip("\n") for i in names] 
     data[' name'] = names
@@ -69,9 +71,17 @@ def process_angicart_output(filename):
     n = len(indeces)
     adjmat = make_adjmat(data,name_index,indeces)
 
+    adjmat_df = pd.DataFrame(adjmat)
+    adjmat_df["id"] = data[' name']
+    
+    adjmat_df_ = adjmat_df.drop("id", axis = 1)
+    adjmat = adjmat_df_.to_numpy()
+    
+
     features = np.array(pd.concat([data[' len(mm)'], data[' <r>_obs(mm)']], axis=1, keys=['length', 'radius']))
     
     features_dataf = pd.concat([data[' name'],data[' len(mm)'], data[' <r>_obs(mm)']], axis=1, keys=['id','length', 'radius'])
+
 
     ''' 
     graph = nx.from_numpy_array(adjmat)
@@ -81,7 +91,7 @@ def process_angicart_output(filename):
     cc = np.array(list(largest_cc))
     features = np.array(features)[cc]
     '''
-    return adjmat,features, name_index, features_dataf
+    return adjmat,features, name_index, features_dataf, adjmat_df
 
 def get_tumor_points(tumor_data):
     tumor = []
@@ -132,7 +142,7 @@ def get_vessels_near_tumor(tumor, name_coords):
     D = pdist(tumor)
     D = squareform(D)
     tumor_radius = np.nanmax(D)/2
-    radius = tumor_radius*2
+    radius = tumor_radius*3
     
     near_tumor = []
     tumor_center = find_tumor_center(tumor)
@@ -146,7 +156,7 @@ def get_vessels_near_tumor(tumor, name_coords):
 
 def get_vessels_in_tumor(tumor, name_coords):
 
-    sensitivity = 0.5 #parameter for how much of a vessel needs to be in a tumor to consider bad.  = 0.5 means throw vessel if its half in the tumor.
+    sensitivity = 0.8 #parameter for how much of a vessel needs to be in a tumor to consider bad.  = 0.5 means throw vessel if its half in the tumor.
 
     tumor_hull = Delaunay(tumor)
     in_tumor = []
@@ -174,7 +184,7 @@ def process_vessel_tumor_coordinates(vessel_file,tumor_file, name_index):
     
     
     from mpl_toolkits.mplot3d import axes3d, Axes3D
-    fig = plt.figure()
+    fig = plt.figure(1)
     ax = Axes3D(fig)
     ax.plot3D(tumor.T[0], tumor.T[1], tumor.T[2], 'gray')
     
@@ -186,6 +196,19 @@ def process_vessel_tumor_coordinates(vessel_file,tumor_file, name_index):
     for t in in_tumor:
         ax.plot3D(name_coords[t].T[0],name_coords[t].T[1],name_coords[t].T[2], color = 'red')
    
+
+    fig = plt.figure(2)
+    ax = Axes3D(fig)
+    ax.plot3D(tumor.T[0], tumor.T[1], tumor.T[2], 'gray')
+    
+
+    #for key in name_coords.keys():
+    #    ax.plot3D(name_coords[key].T[0],name_coords[key].T[1],name_coords[key].T[2], color = 'blue')
+    
+    for t in near_tumor:
+        ax.plot3D(name_coords[t].T[0],name_coords[t].T[1],name_coords[t].T[2], color = 'green')
+    for t in in_tumor:
+        ax.plot3D(name_coords[t].T[0],name_coords[t].T[1],name_coords[t].T[2], color = 'red')
     #ax.plot3D([tumor_center[0],tumor_center[0]+0.5],[tumor_center[1],tumor_center[1]+0.5],[tumor_center[2],tumor_center[2]+0.5], color = 'green')
 
     plt.show()
@@ -231,12 +254,146 @@ def viz_graph(adjmat, nodelist1,nodelist2):
 
 def Diff(li1, li2): 
     return (list(set(li1) - set(li2))) 
+
+from sklearn.neighbors import NearestNeighbors
+def add_spatial_connections(vessel_file,adjmat_ids, valid_ids= None, adjmat = None): # This makes spacial edges
+
+    if valid_ids is None: #Ignore please, go to else
+        vessel_data = pd.read_csv(join(input_path,vessel_file), sep = ',')
+        ids = np.array(adjmat_ids["id"])
+        name_index = {ids[i]:i for i in range(len(ids))}
+        
+        name_points = get_vessel_points(vessel_data,name_index)
+        
+        coms = dict()
+        
+        for name in name_points.keys():
+            if name in ids:
+                vessel = name_points[name]
+                if len(vessel) !=0:
+                
+                    com = np.mean(vessel, axis = 0)
+                    coms[name] = com
+                
+        coms_vals = np.array(list(coms.values()))
+        neigh = NearestNeighbors(4, 1)
+        print(coms_vals.shape)
+        neigh.fit(coms_vals)
+        edges = []
+        for name in progressbar.progressbar(coms.keys()):
+            neighbs = neigh.kneighbors([coms[name]], 4, return_distance=False)
+            for i in neighbs[0][1:]:
+                #print(name)
+                edges.append((name,ids[i]))
+                row = adjmat_ids[adjmat_ids['id'] == name]
+                #print(np.where(np.array(row) == 1))
+                
+                
+                adjmat_ids.loc[adjmat_ids['id'] == name,i] = 1
+                l = adjmat_ids.index[adjmat_ids['id'] == name].tolist()
+                
+                adjmat_ids.loc[i,l] = 1
+                #print(adjmat_ids[adjmat_ids['id'] == name][i])
+    else:
+        # This is the working correct thing
+        vessel_data = pd.read_csv(join(input_path,vessel_file), sep = ',')
+        ids = np.array(vessel_data["nodeid"])
+        name_index = {str(ids[i]):i for i in range(len(ids))}
+        print(type(valid_ids[0]))
+        name_points = get_vessel_points(vessel_data,name_index)
+        
+        coms = dict()
+        
+        for name in valid_ids:
+            vessel = name_points[name]
+            if len(vessel) !=0:
+            
+                com = np.mean(vessel, axis = 0)
+                coms[name] = com
+                
+        coms_vals = np.array(list(coms.values()))
+        neigh = NearestNeighbors(4, 1) # 4 neighbors because first is self. I left it in there because why not. 
+        print(coms_vals.shape)
+        neigh.fit(coms_vals)
+
+        edges = []
+        for name in progressbar.progressbar(coms.keys()):
+            neighbs = neigh.kneighbors([coms[name]], 4, return_distance=False)
+            for i in neighbs[0][1:]:
+                #print(name)
+                edges.append((name,valid_ids[i]))
+        return edges #used in make_valid_adj_matrix
+
+
+
+
+
+    return adjmat_ids
+
+
+
+def make_valid_adj_matrix(filename, valid_ids):
+    data = pd.read_csv(join(input_path,filename), sep = '\t')
+    data = data.sort_values(" name")
+    
+    names = data[' name']
+    names=  [str(i).strip().strip("\n") for i in names] 
+    data[' name'] = names
+
+    n = len(data)
+    adjlist = dict()
+
+    for i in range(n):
+        row = data.iloc[i]
+        curr = row.iloc[0]
+        children = []
+        
+        child_i = 7
+        child = str(row.iloc[child_i]).strip()
+        while not child == 'nan':
+            
+            if child in valid_ids:
+                children.append(child)
+            child_i +=1
+            if child_i >= len(row):
+                break
+            child = str(row.iloc[child_i]).strip()
+
+        if curr in valid_ids:
+            adjlist[curr]  = children
+    
+
+    n = len(list(adjlist.keys()))
+    indeces = list(range(n))
+    keys = list(adjlist.keys())
+    name_index = {keys[i]:indeces[i] for i in range(n)}
+
+    vals = list(adjlist.values())
+    adjmat = np.zeros((n,n))
+    for i in range(n):
+        for c in vals[i]:
+            j = name_index[c]
+            adjmat[i][j]=1
+            adjmat[j][i]=1
+
+
+    edges = add_spatial_connections(filenames[2],None,valid_ids=valid_ids)
+    for v,u in edges:
+        i = name_index[v]
+        j = name_index[u]
+        adjmat[i][j]=1
+        adjmat[j][i]=1
+    return adjmat
+
+
+
+
 ###############################
 if __name__ == '__main__':
     #print(filenames)
     
-    adjmat,features1, name_index, features1_dataf = process_angicart_output(filenames[1]) # return adjacency matrix and matrix of radius and length. same order as adjmat
-    
+    adjmat,features1, name_index, features1_dataf, adjmat_ids = process_angicart_output(filenames[1]) # return adjacency matrix and matrix of radius and length. same order as adjmat
+    adjmat_ids = add_spatial_connections(filenames[2],adjmat_ids) # ignore
     
 
     index_name = {}
@@ -252,30 +409,18 @@ if __name__ == '__main__':
     dis_inx= []
     for i in diseased:
         w = np.where(features1_dataf['id'] == i)[0][0]
+        #w = features1_dataf['id'][features1_dataf['id'] == i]
         dis_inx.append(w)
     features1_dataf['labels'][dis_inx] = 1
 
     healthy = []
     while(len(healthy)<len(dis_inx)):
         r = np.random.randint(len(features1_dataf))
-        if r not in dis_inx:
+        if features1_dataf['id'][r] not in dis_inx:
             healthy.append(r)
     features1_dataf['labels'][healthy] = 0
 
-    #print(len(diseased))
-    
-    '''
-    a = []
-    b = []
-    for i in near_tumor:
-        a.append(name_index[i])
-    for key in name_index.keys():
-        if key not in in_tumor:
-            b.append(name_index[key])
 
-    
-    viz_graph(adjmat,a,b)
-    '''
     #print(filenames[0])
 
     features2 = pd.read_csv(join(input_path,filenames[0]), header = 0)
@@ -287,117 +432,22 @@ if __name__ == '__main__':
     feats2_ids = features2["id"]
 
     features_intersection = list(set(feats1_ids).intersection(set(feats2_ids)))
-    
-    feat1_inx= []
-    for i in features_intersection:
-        w = np.where(features1_dataf['id'] == i)[0][0]
-        feat1_inx.append(w)
-    
-    feat2_inx= []
-    for i in features_intersection:
-        w = np.where(features2['id'] == i)[0][0]
-        feat2_inx.append(w)
 
-    #print(features1_dataf.iloc[feat1_inx].head())
-    #features = pd.DataFrame([features1_dataf.iloc[feat1_inx],features2.iloc[feat2_inx]])
-    
-    feats1 = features1_dataf.iloc[feat1_inx].sort_values('id')
-    feats2 = features2.iloc[feat2_inx].sort_values('id').drop("Unnamed: 0", axis = 1)
-    #print(feats1.head())
-    #print(feats2.head())
-    #features2= features2.sort_values('indx')
+    #feats1= features1_dataf[features1_dataf['id'] == features_intersection]
+    #feats2= features2[features2['id'] == features_intersection]
 
-    features = pd.merge(feats1,feats2,on='id')
+    features = pd.merge(features1_dataf,features2,on='id').drop("Unnamed: 0", axis = 1)
+    
+    valid_ids = np.array(features['id'])
 
     
-
     
-
-    name = list(name_index.keys())
-    diff = Diff(name,features_intersection)
-
-    diff_inds = [name_index[i] for i in diff]
-
-    graph = nx.from_numpy_array(adjmat)
-    for n in diff_inds:
-        graph.remove_node(n)
-    adjmat = nx.to_numpy_array(graph)
-
-    features.to_csv(join(input_path,folder_name+"_feature_matrix.csv"))
+   
+    adjmat = make_valid_adj_matrix(filenames[1],valid_ids)
+    adjmat = pd.DataFrame.from_records(adjmat)
+    #adjmat.to_csv("test.csv")
+    features.to_csv(join("D:\\work\\Classes\\Tufts\\MLonGraphs\\Project\\data\\lung_adjmatrices_featurematrices",folder_name+"_feature_matrix.csv"))
     adj_df = pd.DataFrame.from_records(adjmat)
-    adj_df.to_csv(join(input_path,folder_name+"_adj_matrix.csv"))
+    adjmat.to_csv(join("D:\\work\\Classes\\Tufts\\MLonGraphs\\Project\\data\\lung_adjmatrices_featurematrices",folder_name+"_adj_matrix.csv"))
 
 
-
-    '''
-    #print(features2.head())
-    included= [str(i).strip().strip("\n") for i in list(features2['id'])] 
-    names=  [str(i).strip().strip("\n") for i in list(name_index.keys())] 
-    diseased=  [str(i).strip().strip("\n") for i in diseased]
-    d = Diff(names,included)
-    features_intersection = list(set(names).intersection(set(included)))
-    print(d)
-    name_index_clean ={}
-    count = 0
-    for key in name_index.keys():
-        name = names[count]
-        count+=1
-        
-        name_index_clean[name] = name_index[key]
-
-    d = Diff(names,features_intersection)
-    to_remove = [i for i in d] #list(set(list(in_tumor) + list(d)))
-    to_remove =  list(set([str(i).strip().strip("\n") for i in to_remove]))
-    adjmat,features1 = remove_vessels_by_name(adjmat,features1,name_index_clean,to_remove) # removes vessels from graph and feature matrix (used for vessels in tumor because invalid)
-    features2[features2.columns[1]]=included
-
-    diff = Diff(included,features_intersection)
-    dr = []
-   # w = np.where(features2.id in intersection)
-    for i in diff:
-        w = np.where(features2.id == i)[0][0]
-        dr.append(w)
-    dis_inds = []
-    for i in diseased:
-        w = np.where(features2.id == i)[0]
-        if len(w)>0:
-            dis_inds.append(w[0])
-
-    print(len(features2))
-    features2 = features2.drop(dr)
-    print(len(features2))
-    print(len(features1))
-    inds = []
-    for i in features2.id:
-        if(i in name_index_clean):
-            inds.append(name_index_clean[i])
-
-    #print(features2.head())
-    features2["len"] = features1[:,0] 
-    features2["rad"] = features1[:,1]  
-    features2["indx"] = inds
-    features2 = features2.drop(["Unnamed: 0", "id"], axis = 1)
-    features2= features2.sort_values('indx')
-    features2["indx"] = list(range(len(features2["indx"])))
-    features2["labels"] = -1
-    features2["labels"].loc[dis_inds] = 1
-    
-   # print(features2["labels"][dis_inds])
-
-    inds = list(range(len(features2)))
-    healthy = []
-    count = 0
-    while(len(healthy)<len(dis_inds)):
-        r = np.random.randint(len(inds))
-        if r not in dis_inds:
-            healthy.append(r)
-            
-    print(healthy)
-    
-    features2["labels"].loc[healthy] = 0
-    #features2 = np.array(features2)
-    #print(np.where(features2.labels == 1))
-    features2.to_csv(join(input_path,folder_name+"_feature_matrix.csv"))
-    adj_df = pd.DataFrame.from_records(adjmat)
-    adj_df.to_csv(join(input_path,folder_name+"_adj_matrix.csv"))
-    '''

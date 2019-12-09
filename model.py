@@ -18,7 +18,9 @@ class SimpleModel:
         X = Input((F,))
         
         #h1 = GraphConv(100)([X,A])
-        h2 = GraphSageConv(50)([X,A])
+        h2 = GraphSageConv(100)([X,A])
+       
+       
 
         d = Dense(64, activation = 'relu')(h2)
         y = Dense(1, activation = 'sigmoid')(d)
@@ -33,10 +35,11 @@ class SimpleModel:
         return 
         
     def fit(self,A,X, labels):
+        print(A.shape,X.shape,labels.shape)
         self.model.fit([A,X], labels,
                 epochs=10,
                 batch_size=self.MAX_GRAPH_SIZE,
-                validation_split = 0.0, verbose = 1)
+                validation_split = 0.0, verbose = 1, shuffle = False)
         return
 
     def predict(self, A, X):

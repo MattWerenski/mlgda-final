@@ -6,11 +6,16 @@ from model import SimpleModel
 from scipy.sparse import lil_matrix
 from load_data import *
 
-A,X,y = load_data()
+#data, max_graph_size, feat_size = load_all_data()
+#A,X,y = data[0]
+
+
+A,X,y, max_graph_size, feat_size = load_data()
+
 print('-------- SHAPES ----------')
 print(A.shape, X.shape, y.shape)
-
-model = SimpleModel(A.shape[0], X.shape[-1])
+print(max_graph_size, feat_size)
+model = SimpleModel(max_graph_size, feat_size)
 
 model.fit(A,X,y)
 
