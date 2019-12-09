@@ -59,6 +59,7 @@ def load_all_data():
         y= datum[2]
 
         Abig = np.zeros((max_graph_size,max_graph_size))
+        Abig = np.identity(max_graph_size)
         Abig[0:A.shape[0],0:A.shape[1]] = A
 
         Xbig = np.zeros((max_graph_size,feat_size))
@@ -78,8 +79,8 @@ def load_data():
     to_drop = ["Unnamed: 0","id","labels"]
 
 
-    adj = pd.read_csv(join(input_path,"lung01_203_adj_matrix.csv"))
-    features = pd.read_csv(join(input_path,"lung01_203_feature_matrix.csv"))
+    adj = pd.read_csv(join(input_path,"lung01_415_adj_matrix.csv"))
+    features = pd.read_csv(join(input_path,"lung01_415_feature_matrix.csv"))
 
     features["labels"][features["labels"] == -1] = -1 # set to -1 for semi supervised and 0 for naive supervised
     y = np.array(features["labels"])

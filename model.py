@@ -10,6 +10,7 @@ from keras.layers import Layer
 from keras.activations import relu
 from MyGraphConv import *
 from myloss import *
+from tqdm import tqdm 
 class SimpleModel:
     def __init__(self,MAX_GRAPH_SIZE,F):
         self.MAX_GRAPH_SIZE = MAX_GRAPH_SIZE
@@ -18,8 +19,11 @@ class SimpleModel:
         X = Input((F,))
         
         #h1 = GraphConv(100)([X,A])
-        h2 = GraphSageConv(100)([X,A])
-       
+        
+        h2 = GraphSageConv(20)([X,A])
+        h2 = GraphSageConv(20)([X,A])
+        
+        
        
 
         d = Dense(64, activation = 'relu')(h2)
@@ -40,6 +44,18 @@ class SimpleModel:
                 epochs=10,
                 batch_size=self.MAX_GRAPH_SIZE,
                 validation_split = 0.0, verbose = 1, shuffle = False)
+        return
+    
+    def fit_many(self,data):
+        #print(A.shape,X.shape,labels.shape)
+        for i in tqdm(range(10)):
+            for datum in data:
+                A,X, labels = datum
+                #print(A.shape)
+                self.model.fit([A,X], labels,
+                        epochs=5,
+                        batch_size=self.MAX_GRAPH_SIZE,
+                        validation_split = 0.0, verbose = 0, shuffle = False)
         return
 
     def predict(self, A, X):
