@@ -41,7 +41,7 @@ class SimpleModel:
     def fit(self,A,X, labels):
         print(A.shape,X.shape,labels.shape)
         self.model.fit([A,X], labels,
-                epochs=10,
+                epochs=100,
                 batch_size=self.MAX_GRAPH_SIZE,
                 validation_split = 0.0, verbose = 1, shuffle = False)
         return

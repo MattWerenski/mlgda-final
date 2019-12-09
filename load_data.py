@@ -9,7 +9,9 @@ from os import walk
 
 def load_all_data():
     #input_path = "D:\\work\\Classes\\Tufts\\MLonGraphs\\Project\\data\\lung_adjmatrices_featurematrices\\"
-    input_path = "D:\work\Classes\Tufts\MLonGraphs\Project\data\lung_adjmatrices_featurematrices"
+    #input_path = "D:\work\Classes\Tufts\MLonGraphs\Project\data\lung_adjmatrices_featurematrices"
+
+    input_path = "data/lung_adjmatrices_featurematrices/"
 
     to_drop = ["Unnamed: 0","id","labels"]
     max_graph_size = 0
@@ -23,13 +25,14 @@ def load_all_data():
         break
 
     filenames = f
+    filenames.sort()
 
     data = []
     
     for i in range(0,len(filenames)-1,2):
         adj = pd.read_csv(join(input_path,filenames[i]))
         features = pd.read_csv(join(input_path,filenames[i+1]))
-        
+
 
         features["labels"][features["labels"] == -1] = -1 # set to -1 for semi supervised and 0 for naive supervised
         y = np.array(features["labels"])
