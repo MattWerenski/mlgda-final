@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow import keras 
 import pandas as pd
 import numpy as np
-from model import SimpleModel, DenseModel
+from model import SimpleModel, DenseModel, TwoAdjModel
 from scipy.sparse import lil_matrix
 from load_data import *
 
@@ -41,8 +41,9 @@ print(np.concatenate(feats).shape)
 
 
 #print(max_graph_size, feat_size)#
-model = SimpleModel(max_graph_size, feat_size)
+#model = SimpleModel(max_graph_size, feat_size)
 #model = DenseModel(max_graph_size, feat_size)
+model = TwoAdjModel(max_graph_size, feat_size)
 
 Av = np.concatenate(adjsv)
 As = np.concatenate(adjss)
@@ -50,14 +51,15 @@ Xs = np.concatenate(feats)
 ys = np.concatenate(labels)
 
 
-model.fit(As,Xs,ys)
+model.fit(Av, As, Xs,ys)
 #model.fit_many(data[1:])
 
-A,X,y = data[1]
-score1, conf, auc, f1 = model.evaluate(A,X,y)
+Av,As,X,y = data[1]
+score1, conf, auc, f1 = model.evaluate(Av,As,X,y)
 
 
 print(score1, conf, auc, f1)
+'''
 preds= np.round(model.predict(A,X))
 
 
@@ -68,3 +70,4 @@ df= pd.DataFrame.from_records(preds)
 df['id'] = features['id']
 df.to_csv("predictions_lung01_041.csv")
 #print(score2, conf2)
+'''

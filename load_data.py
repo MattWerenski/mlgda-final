@@ -131,7 +131,8 @@ def load_all_data():
 
 def load_all_data_two_matrices():
     #input_path = "D:\\work\\Classes\\Tufts\\MLonGraphs\\Project\\data\\lung_adjmatrices_featurematrices\\"
-    input_path = "D:\\work\\Classes\\Tufts\\MLonGraphs\\Project\\data\\lung_multiple_adjmatrices"
+    #input_path = "D:\\work\\Classes\\Tufts\\MLonGraphs\\Project\\data\\lung_multiple_adjmatrices"
+    input_path = "data/lung_multiple_adjmatrices/"
 
     to_drop = ["Unnamed: 0","id","labels"]
     max_graph_size = 0
@@ -145,6 +146,8 @@ def load_all_data_two_matrices():
         break
 
     filenames = f
+
+    filenames.sort()
 
     data = []
     
