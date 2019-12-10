@@ -12,25 +12,30 @@ from tensorflow import set_random_seed
 set_random_seed(2)
 np.random.seed(2)
 
-data, max_graph_size, feat_size = load_all_data()
+#data, max_graph_size, feat_size = load_all_data()
+data, max_graph_size, feat_size = load_all_data_two_matrices()
 #A,X,y = data[0]
 
 
 #A,X,y, max_graph_size, feat_size = load_data()
 
-adjs = []
+
+
+adjsv = []
+adjss = []
 feats = []
 labels = []
 
 for i in [0,2,3,4,5]:
-    adjs.append(data[i][0])
-    feats.append(data[i][1])
-    labels.append(data[i][2])
+    adjsv.append(data[i][0])
+    adjss.append(data[i][1])
+    feats.append(data[i][2])
+    labels.append(data[i][3])
 
 print('-------- SHAPES ----------')
 print('max graph ',max_graph_size)
 print(np.concatenate(labels).shape)
-print(np.concatenate(adjs).shape)
+print(np.concatenate(adjsv).shape)
 print(np.concatenate(feats).shape)
 
 
@@ -39,7 +44,8 @@ print(np.concatenate(feats).shape)
 model = SimpleModel(max_graph_size, feat_size)
 #model = DenseModel(max_graph_size, feat_size)
 
-As = np.concatenate(adjs)
+Av = np.concatenate(adjsv)
+As = np.concatenate(adjss)
 Xs = np.concatenate(feats)
 ys = np.concatenate(labels)
 
