@@ -11,25 +11,7 @@ import progressbar
 from scipy.spatial import Delaunay
 from scipy.spatial.distance import pdist, squareform
 
-parser = argparse.ArgumentParser(description='Covert Angicart++ output to adjacency matrix and file of features.')
-parser.add_argument('path_to_files', metavar='P', type=str, nargs=1,
-                    help='A path to the folder containing angicart output files.')
 
-args = parser.parse_args()
-
-input_path = args.path_to_files[0]
-
-folder_name = split(split(input_path)[0])[1]
-print(folder_name)
-
-f = []
-for (dirpath, dirnames, filenames) in walk(input_path):
-    for filename in filenames:
-        if '.tsv' in filename or '.csv' in filename:
-            f.append(filename)
-    break
-
-filenames = f
 
 
 def make_adjmat(data, name_index, indeces):
@@ -65,7 +47,19 @@ def process_angicart_output(filename):
     names = data[' name']
     names=  [str(i).strip().strip("\n") for i in names] 
     data[' name'] = names
-    
+    to_drop = ['.04','.05','.06','.07','.08','.09']
+    inds = []
+    ind = 0
+    for name in names:
+        for d in to_drop:
+            if d in name:
+                inds.append(ind)
+        ind+=1
+    print(len(data))
+    data = data.drop([data.index[inds[i]] for i in range(len(inds))])
+    data = data.reindex(range(len(data)))
+    print(len(data))
+    print(data.head())
     indeces = list(range(len(data[' name'])))
     name_index = {data[' name'][i]:indeces[i] for i in range(len(indeces))}
     n = len(indeces)
@@ -80,7 +74,7 @@ def process_angicart_output(filename):
 
     features = np.array(pd.concat([data[' len(mm)'], data[' <r>_obs(mm)']], axis=1, keys=['length', 'radius']))
     
-    features_dataf = pd.concat([data[' name'],data[' len(mm)'], data[' <r>_obs(mm)']], axis=1, keys=['id','length', 'radius'])
+    features_dataf = pd.concat([data[' name'],data[' vol(cu.mm)'],data[' len(mm)'], data[' <r>_obs(mm)']], axis=1, keys=['id','vol','length', 'radius'])
 
 
     ''' 
@@ -106,7 +100,9 @@ def get_vessel_points(vessel_data, name_index):
     for i in progressbar.progressbar(range(len(vessel_data))):
         point = np.array((vessel_data.iloc[i]['x'],vessel_data.iloc[i]['y'],vessel_data.iloc[i]['z']))
         name =  str(vessel_data.iloc[i]['nodeid']).strip()
+        
         if name in name_coords.keys():
+            #print(name)
             name_coords[name].append(point)
             
     for key in progressbar.progressbar(name_coords.keys()):
@@ -142,7 +138,7 @@ def get_vessels_near_tumor(tumor, name_coords):
     D = pdist(tumor)
     D = squareform(D)
     tumor_radius = np.nanmax(D)/2
-    radius = tumor_radius*3
+    radius = tumor_radius*1.2
     
     near_tumor = []
     tumor_center = find_tumor_center(tumor)
@@ -156,7 +152,7 @@ def get_vessels_near_tumor(tumor, name_coords):
 
 def get_vessels_in_tumor(tumor, name_coords):
 
-    sensitivity = 0.8 #parameter for how much of a vessel needs to be in a tumor to consider bad.  = 0.5 means throw vessel if its half in the tumor.
+    sensitivity = 1.1 #parameter for how much of a vessel needs to be in a tumor to consider bad.  = 0.5 means throw vessel if its half in the tumor.
 
     tumor_hull = Delaunay(tumor)
     in_tumor = []
@@ -181,15 +177,15 @@ def process_vessel_tumor_coordinates(vessel_file,tumor_file, name_index):
     in_tumor = get_vessels_in_tumor(tumor,name_coords) #to be thrown away because false reconstructions inside solid mass
     near_tumor = get_vessels_near_tumor(tumor,name_coords) # to be labeled diseased (need to remove in_tumor first)
     
-    
-    
+    '''
+    #print(near_tumor)
     from mpl_toolkits.mplot3d import axes3d, Axes3D
     fig = plt.figure(1)
     ax = Axes3D(fig)
     ax.plot3D(tumor.T[0], tumor.T[1], tumor.T[2], 'gray')
     
-    #for key in name_coords.keys():
-    #    ax.plot3D(name_coords[key].T[0],name_coords[key].T[1],name_coords[key].T[2], color = 'blue')
+    for key in name_coords.keys():
+        ax.plot3D(name_coords[key].T[0],name_coords[key].T[1],name_coords[key].T[2], color = 'blue')
     
     for t in near_tumor:
         ax.plot3D(name_coords[t].T[0],name_coords[t].T[1],name_coords[t].T[2], color = 'green')
@@ -212,7 +208,7 @@ def process_vessel_tumor_coordinates(vessel_file,tumor_file, name_index):
     #ax.plot3D([tumor_center[0],tumor_center[0]+0.5],[tumor_center[1],tumor_center[1]+0.5],[tumor_center[2],tumor_center[2]+0.5], color = 'green')
 
     plt.show()
-    
+    '''
     return in_tumor, near_tumor
     
     
@@ -276,12 +272,13 @@ def add_spatial_connections(vessel_file,adjmat_ids, valid_ids= None, adjmat = No
                     coms[name] = com
                 
         coms_vals = np.array(list(coms.values()))
-        neigh = NearestNeighbors(4, 1)
+        K = 4
+        neigh = NearestNeighbors(K, 1, algorithm = 'brute',metric = "mahalanobis", metric_params= {'V':np.cov(coms_vals)})
         print(coms_vals.shape)
         neigh.fit(coms_vals)
         edges = []
         for name in progressbar.progressbar(coms.keys()):
-            neighbs = neigh.kneighbors([coms[name]], 4, return_distance=False)
+            neighbs = neigh.kneighbors([coms[name]], K, return_distance=False)
             for i in neighbs[0][1:]:
                 #print(name)
                 edges.append((name,ids[i]))
@@ -383,7 +380,11 @@ def make_valid_adj_matrix(filename, valid_ids):
         j = name_index[u]
         adjmat[i][j]=1
         adjmat[j][i]=1
+
+
+    
     return adjmat
+
 
 
 
@@ -391,6 +392,25 @@ def make_valid_adj_matrix(filename, valid_ids):
 ###############################
 if __name__ == '__main__':
     #print(filenames)
+    parser = argparse.ArgumentParser(description='Covert Angicart++ output to adjacency matrix and file of features.')
+    parser.add_argument('path_to_files', metavar='P', type=str, nargs=1,
+                        help='A path to the folder containing angicart output files.')
+
+    args = parser.parse_args()
+
+    input_path = args.path_to_files[0]
+
+    folder_name = split(split(input_path)[0])[1]
+    print(folder_name)
+
+    f = []
+    for (dirpath, dirnames, filenames) in walk(input_path):
+        for filename in filenames:
+            if '.tsv' in filename or '.csv' in filename:
+                f.append(filename)
+        break
+
+    filenames = f
     
     adjmat,features1, name_index, features1_dataf, adjmat_ids = process_angicart_output(filenames[1]) # return adjacency matrix and matrix of radius and length. same order as adjmat
     adjmat_ids = add_spatial_connections(filenames[2],adjmat_ids) # ignore
@@ -404,22 +424,35 @@ if __name__ == '__main__':
     
     diseased = Diff(near_tumor, in_tumor)
 
-
+    subtree = near_tumor[0].split('.')[1]
+    print("-----------------------------")
+    print(subtree)
     features1_dataf['labels'] = -1
     dis_inx= []
+    labels = -1*np.ones(len(features1_dataf))
+    ids = np.array(features1_dataf['id'])
+    for i in range(len(ids)):
+        if ids[i] in diseased:
+            labels[i] = 1
+    
     for i in diseased:
         w = np.where(features1_dataf['id'] == i)[0][0]
+        
         #w = features1_dataf['id'][features1_dataf['id'] == i]
         dis_inx.append(w)
-    features1_dataf['labels'][dis_inx] = 1
+    features1_dataf['labels']=labels
 
     healthy = []
-    while(len(healthy)<len(dis_inx)):
+    healthy_ids = []
+    while(len(healthy)<len(diseased)*3):
         r = np.random.randint(len(features1_dataf))
-        if features1_dataf['id'][r] not in dis_inx:
-            healthy.append(r)
+        if features1_dataf['id'][r] not in diseased:
+            if subtree not in str(features1_dataf['id'][r]):
+                healthy.append(r)
+                healthy_ids.append(features1_dataf['id'][r])
     features1_dataf['labels'][healthy] = 0
-
+    print(near_tumor)
+    print(healthy_ids)
 
     #print(filenames[0])
 
@@ -441,7 +474,7 @@ if __name__ == '__main__':
     valid_ids = np.array(features['id'])
 
     
-    
+    print(features.head())
    
     adjmat = make_valid_adj_matrix(filenames[1],valid_ids)
     adjmat = pd.DataFrame.from_records(adjmat)
